@@ -1,0 +1,63 @@
+import torch
+import torch.nn as nn
+
+class iAdam(torch.optim.Optimizer):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8):
+        # Initialize default values for learning rate, betas, and epsilon
+        defaults = {'lr': lr, 'betas': betas, 'eps': eps}
+        super(iAdam, self).__init__(params, defaults)
+
+        # Initialize state for each parameter (e.g., for each weight)
+        for group in self.param_groups:
+            for p in group['params']:
+                self.state[p] = {
+                    'step': 0,  # Tracks the number of updates
+                    'exp_avg': torch.zeros_like(p.data),  # Exponential moving average of gradients (m_w, m_b)
+                    'exp_avg_sq': torch.zeros_like(p.data),  # Exponential moving average of squared gradients (v_w, v_b)
+                }
+
+    def step(self):
+        # Loop over parameter groups
+        for group in self.param_groups:
+            lr = group['lr']  # Learning rate
+            beta1, beta2 = group['betas']  # Betas for moving averages
+            eps = group['eps']  # Small epsilon to prevent division by zero
+
+            # Loop over each parameter in the group (e.g., weights, biases)
+            for p in group['params']:
+                if p.grad is None:
+                    continue  # Skip parameters with no gradients
+
+                # Get the state for this parameter
+                state = self.state[p]
+
+                # Update step count
+                state['step'] += 1
+
+                # Get the moving averages of gradients and squared gradients
+                exp_avg = state['exp_avg']  # This is like m_w or m_b
+                exp_avg_sq = state['exp_avg_sq']  # This is like v_w or v_b
+
+                # Get the gradient
+                grad = p.grad.data
+
+                # Moment-shifted weights: w_shift = p - exp_avg (equivalent to m_w and m_b shifting)
+                shifted_weight = p.data - exp_avg
+
+                # Compute the gradient based on the shifted weight (i.e., moment-shifted gradient)
+                # You can customize this part based on your gradient calculation logic
+                shifted_grad = grad - exp_avg  # Moment-shifted gradient calculation (can be adjusted as needed)
+
+                # Update the moving averages with the new gradients
+                exp_avg.mul_(beta1).add_(shifted_grad, alpha=1 - beta1)  # m_w = beta1 * m_w + (1 - beta1) * dw_shifted
+                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)  # v_w = beta2 * v_w + (1 - beta2) * dw**2
+
+                # Compute bias-corrected estimates for moving averages
+                bias_correction1 = 1 - beta1 ** state['step']  # Bias correction for m_w
+                bias_correction2 = 1 - beta2 ** state['step']  # Bias correction for v_w
+
+                # Compute the step size and final parameter update
+                step_size = lr / bias_correction1  # Corrected learning rate
+                denom = exp_avg_sq.sqrt().div(bias_correction2).add_(eps)  # Adjust denominator with epsilon to avoid division by zero
+                p.data.addcdiv_(exp_avg, denom, value=-step_size)  # Update weights using Adam formula
+
