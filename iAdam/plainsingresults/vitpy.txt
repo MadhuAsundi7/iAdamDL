@@ -1,0 +1,18 @@
+import os
+import timm
+import torch
+import torch.nn as nn
+
+# Load the pre-trained ViT model (vit_base_patch16_224)
+model = timm.create_model('vit_base_patch16_224', pretrained=True)
+
+# Freeze all parameters except the final classification head
+for param in model.parameters():
+    param.requires_grad = False  # Freeze all layers
+
+# Modify the final classification layer for 28 classes
+model.head = nn.Linear(model.head.in_features, 28)
+
+# Move the model to the GPU
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = model.to(device)
